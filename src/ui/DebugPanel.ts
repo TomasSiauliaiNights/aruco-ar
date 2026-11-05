@@ -45,6 +45,18 @@ export interface DebugMetrics {
   }[];
 }
 
+declare global {
+  interface Window {
+    /**
+     * The same metrics the debug overlay renders, published every frame while
+     * the overlay is open. Handy from the browser console on a real device, and
+     * it is what the end-to-end test reads instead of scraping formatted text
+     * out of the DOM. Undefined whenever the overlay is closed.
+     */
+    markerArDebug?: DebugMetrics;
+  }
+}
+
 export interface TuningValues {
   positionMinCutoff: number;
   positionBeta: number;

@@ -380,7 +380,15 @@ export class ARController {
 
     this.drawOverlay();
     this.updateLockPill(visible.length > 0, this.tracker.hasLock);
-    this.debugPanel?.update(this.collectMetrics(visible));
+
+    if (this.debugPanel?.isVisible) {
+      const metrics = this.collectMetrics(visible);
+      this.debugPanel.update(metrics);
+      // Published only while the debug overlay is open, so the same numbers can
+      // be read from the console or by an automated test without scraping
+      // formatted text out of the DOM.
+      window.markerArDebug = metrics;
+    }
   };
 
   private drawOverlay(): void {

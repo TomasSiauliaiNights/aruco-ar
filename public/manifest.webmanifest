@@ -1,0 +1,42 @@
+{
+  "name": "Marker AR",
+  "short_name": "Marker AR",
+  "description": "Point your camera at a printed ArUco marker and a 3D model appears on it. Everything runs on your device.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "categories": ["utilities", "graphics"],
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Print a marker",
+      "url": "./marker.html"
+    },
+    {
+      "name": "Calibrate camera",
+      "url": "./calibrate.html"
+    }
+  ]
+}

@@ -56,17 +56,24 @@ export interface SyntheticFrame {
 export function placementAt(t: number, width: number, height: number): MarkerPlacement {
   const cx = width / 2 + Math.sin(t * 0.9) * width * 0.16;
   const cy = height / 2 + Math.cos(t * 0.7) * height * 0.12;
-  // Apparent size cycles between roughly a quarter and a half of frame height.
-  const size = height * (0.34 + 0.12 * Math.sin(t * 0.5));
+  // Apparent side length, cycling between a fifth and two fifths of the frame
+  // height. The upper bound keeps the white quiet zone inside the frame too:
+  // a clipped quiet zone costs detections for reasons that have nothing to do
+  // with the detector under test.
+  const size = height * (0.3 + 0.1 * Math.sin(t * 0.5));
   const yaw = Math.sin(t * 0.8) * 0.5;
   const pitch = Math.cos(t * 0.6) * 0.4;
   const roll = Math.sin(t * 0.35) * 0.3;
 
-  // Project a square through a simple pinhole, rather than interpolating
-  // corners: the result is a genuinely projective quad, so the pose solver is
-  // given a consistent problem.
+  // Project a unit square through a pinhole rather than interpolating corners,
+  // so the result is a genuinely projective quad and the pose solver is given a
+  // consistent problem.
+  //
+  // Working in units of the square's own side length: at depth Z the square
+  // spans f/Z pixels, so placing it at Z0 = f / size makes it span exactly
+  // `size` pixels when it faces the camera.
   const f = height * 1.1;
-  const depth = (f * 0.1) / (size / height) / 10;
+  const depth = f / size;
   const half = 0.5;
   const local: [number, number, number][] = [
     [-half, half, 0],
@@ -97,12 +104,9 @@ export function placementAt(t: number, width: number, height: number): MarkerPla
     py = sinC * px + cosC * py;
     px = nx;
 
-    const scale = size;
-    const X = px * scale;
-    const Y = py * scale;
-    const Z = pz * scale + depth * f;
-
-    out.push(cx + (f * X) / Z, cy - (f * Y) / Z);
+    // px, py, pz are already in units of the square's side.
+    const Z = pz + depth;
+    out.push(cx + (f * px) / Z, cy - (f * py) / Z);
   }
 
   return { corners: out as MarkerPlacement['corners'] };
@@ -243,45 +247,52 @@ export function renderScene(opts: SceneOptions, placement: MarkerPlacement): Syn
   const lo = -quiet;
   const hi = 1 + quiet;
 
-  /** Marker-space luminance at (u, v), bilinearly interpolated over cells. */
+  /**
+   * Marker-space luminance at (u, v), with SHARP cell boundaries.
+   *
+   * Interpolating between cell values was the obvious thing to do and it was
+   * wrong: it turns every cell into a gradient, OpenCV's per-cell bit sampling
+   * averages that down toward the midpoint, and the marker becomes candidates
+   * that are found but never decoded. A printed marker has hard-edged cells;
+   * the smoothness belongs at the edges only, and comes from supersampling
+   * below, which is also what a real camera does.
+   */
   const sheetLuma = (u: number, v: number): number | null => {
     if (u < lo || u > hi || v < lo || v > hi) return null;
-    if (u < 0 || u > 1 || v < 0 || v > 1) return 243; // paper white
-    // Bilinear over the 6x6 cell grid, sampled at cell centres.
-    const fx = u * GRID - 0.5;
-    const fy = v * GRID - 0.5;
-    const x0 = Math.floor(fx);
-    const y0 = Math.floor(fy);
-    const tx = fx - x0;
-    const ty = fy - y0;
-    const cell = (cx: number, cy: number): number => {
-      const col = Math.min(GRID - 1, Math.max(0, cx));
-      const row = Math.min(GRID - 1, Math.max(0, cy));
-      return bits[row]?.[col] ? 18 : 243;
-    };
-    const a = cell(x0, y0);
-    const b = cell(x0 + 1, y0);
-    const c = cell(x0, y0 + 1);
-    const d = cell(x0 + 1, y0 + 1);
-    return a * (1 - tx) * (1 - ty) + b * tx * (1 - ty) + c * (1 - tx) * ty + d * tx * ty;
+    if (u < 0 || u >= 1 || v < 0 || v >= 1) return 243; // paper white
+    const col = Math.min(GRID - 1, Math.max(0, Math.floor(u * GRID)));
+    const row = Math.min(GRID - 1, Math.max(0, Math.floor(v * GRID)));
+    return bits[row]?.[col] ? 18 : 243;
   };
+
+  // Supersampling gives edges that land on true sub-pixel positions, which is
+  // what makes sub-pixel corner refinement measurable at all. 2x2 is enough:
+  // 3x3 moved the measured corner error by under 0.02 px for 2.3x the cost.
+  const SS = 2;
+  const inv = 1 / (SS * SS);
+  const step = 1 / SS;
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const px = x + 0.5;
-      const py = y + 0.5;
-      const w = Hi[6] * px + Hi[7] * py + Hi[8];
-      let luma: number;
-      if (Math.abs(w) < 1e-9) {
-        luma = bg;
-      } else {
-        const u = (Hi[0] * px + Hi[1] * py + Hi[2]) / w;
-        const v = (Hi[3] * px + Hi[4] * py + Hi[5]) / w;
-        const sheet = sheetLuma(u, v);
-        // Gentle background gradient: a perfectly flat background is easier for
-        // adaptive thresholding than anything real.
-        luma = sheet ?? bg + 26 * (y / height) - 13;
+      let acc = 0;
+      for (let sy = 0; sy < SS; sy++) {
+        for (let sx = 0; sx < SS; sx++) {
+          const px = x + (sx + 0.5) * step;
+          const py = y + (sy + 0.5) * step;
+          const w = Hi[6] * px + Hi[7] * py + Hi[8];
+          if (Math.abs(w) < 1e-9) {
+            acc += bg;
+            continue;
+          }
+          const u = (Hi[0] * px + Hi[1] * py + Hi[2]) / w;
+          const v = (Hi[3] * px + Hi[4] * py + Hi[5]) / w;
+          const sheet = sheetLuma(u, v);
+          // Gentle background gradient: a perfectly flat background is easier
+          // for adaptive thresholding than anything real.
+          acc += sheet ?? bg + 26 * (y / height) - 13;
+        }
       }
+      let luma = acc * inv;
       if (noise > 0) luma += (rand() - 0.5) * 255 * noise;
       const v8 = luma < 0 ? 0 : luma > 255 ? 255 : luma;
       const o = (y * width + x) * 4;
