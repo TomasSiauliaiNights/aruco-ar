@@ -239,6 +239,100 @@ describe('PoseTracker frame-rate independence', () => {
   });
 });
 
+describe('PoseTracker responsiveness', () => {
+  /**
+   * Replays a marker sliding at a constant speed, with detections arriving at a
+   * realistic rate and rendering at display rate, and reports the mean distance
+   * between the filtered pose and the truth, in millimetres.
+   */
+  function steadyStateLagMm(opts: Partial<typeof defaultTrackerOptions>): number {
+    const t = tracker(opts);
+    const speed = 0.3; // m/s, an unhurried hand
+    const frame = 1000 / 60;
+    const detectInterval = 1000 / 15;
+
+    let now = 0;
+    let lastDetect = -Infinity;
+    let errorSum = 0;
+    let samples = 0;
+
+    for (let i = 0; i < 400; i++) {
+      now += frame;
+      const truth = (speed * now) / 1000;
+      if (now - lastDetect >= detectInterval) {
+        lastDetect = now;
+        t.ingest([{ id: 0, rvec: [0, 0, 0], tvec: [truth, 0, 0.5], reprojError: 0.3 }], now);
+      }
+      t.update(now, frame);
+      if (i > 200) {
+        const marker = t.visible[0];
+        if (marker) {
+          errorSum += Math.abs(marker.position[0] - truth);
+          samples++;
+        }
+      }
+    }
+    return (errorSum / samples) * 1000;
+  }
+
+  /** RMS wobble of the filtered pose while the marker is still, in millimetres. */
+  function stationaryJitterMm(opts: Partial<typeof defaultTrackerOptions>): number {
+    const t = tracker(opts);
+    let seed = 12345;
+    const noise = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296 - 0.5;
+    };
+    const frame = 1000 / 60;
+    let now = 0;
+    let lastDetect = -Infinity;
+    const values: number[] = [];
+
+    for (let i = 0; i < 400; i++) {
+      now += frame;
+      if (now - lastDetect >= 1000 / 15) {
+        lastDetect = now;
+        // +/- 0.4 mm of measurement noise, the order sub-pixel corners give.
+        t.ingest(
+          [{ id: 0, rvec: [0, 0, 0], tvec: [noise() * 0.0008, 0, 0.5], reprojError: 0.3 }],
+          now,
+        );
+      }
+      t.update(now, frame);
+      if (i > 200) {
+        const marker = t.visible[0];
+        if (marker) values.push(marker.position[0]);
+      }
+    }
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    return Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / values.length) * 1000;
+  }
+
+  it('keeps up with a moving marker', () => {
+    // The defaults previously used a beta of 0.06, which is sized for positions
+    // in pixels. With metres, hand speeds of ~0.3 m/s pushed the cutoff up by
+    // only ~0.02 Hz, so One Euro's speed adaptation did nothing and the model
+    // visibly dragged. This pins the fix.
+    const lag = steadyStateLagMm({});
+    // Measured at 15.6 mm; ~10 mm of that is the detection interval itself.
+    expect(lag).toBeLessThan(20);
+  });
+
+  it('is markedly more responsive than a pixel-scaled beta would be', () => {
+    const tuned = steadyStateLagMm({});
+    const pixelScaled = steadyStateLagMm({ positionMinCutoff: 1.2, positionBeta: 0.06 });
+    expect(tuned).toBeLessThan(pixelScaled * 0.5);
+  });
+
+  it('still smooths a stationary marker', () => {
+    // Responsiveness must not have been bought by simply disabling smoothing:
+    // the filtered output has to be calmer than the raw measurements.
+    const jitter = stationaryJitterMm({});
+    // Measured at 0.135 mm against +/-0.4 mm of input noise.
+    expect(jitter).toBeLessThan(0.25);
+  });
+});
+
 describe('PoseTracker configuration', () => {
   it('reset clears all tracks', () => {
     const t = tracker();

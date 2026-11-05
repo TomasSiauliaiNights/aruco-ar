@@ -42,10 +42,12 @@ export interface TrackerOptions {
 }
 
 export const defaultTrackerOptions: TrackerOptions = {
-  positionMinCutoff: 1.2,
-  positionBeta: 0.06,
+  positionMinCutoff: 4.0,
+  // See the note in config.ts: beta is scaled for metres, not pixels, and the
+  // lag/jitter trade-off is measured there.
+  positionBeta: 6.0,
   positionDerivateCutoff: 1.0,
-  rotationSlerp: 0.28,
+  rotationSlerp: 0.45,
   holdMs: 220,
   fadeOutMs: 260,
   fadeInMs: 180,
@@ -207,7 +209,11 @@ export class PoseTracker {
   get visible(): TrackedMarker[] {
     const out: TrackedMarker[] = [];
     for (const t of this.tracks.values()) {
-      if (t.opacity <= 0 && t.phase === 'gone') continue;
+      // Anything fully transparent is not visible, whatever phase says. A fade
+      // can reach zero a frame or two before `sinceSeen` crosses into 'gone',
+      // and returning those made callers place and light a model nobody can
+      // see -- and made "visible" mean something other than it says.
+      if (t.opacity <= 0) continue;
       out.push({
         id: t.id,
         position: t.filteredPosition,

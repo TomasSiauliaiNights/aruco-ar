@@ -99,6 +99,21 @@ export async function loadModel(
 
   await repairGeometry(model);
 
+  // Orientation first, then scale, then seating.
+  //
+  // The order matters. Rotating after the model has been seated spins it about
+  // its own base, which pushes half of it below the marker plane -- laying a
+  // standing model flat would bury it. Rotating first means the scale is
+  // computed from the footprint the model will actually present, and the
+  // seating correction below sees its final shape.
+  if (cfg.rotationDeg) {
+    model.rotation.set(
+      (cfg.rotationDeg[0] * Math.PI) / 180,
+      (cfg.rotationDeg[1] * Math.PI) / 180,
+      (cfg.rotationDeg[2] * Math.PI) / 180,
+    );
+  }
+
   // Scale
   const box = new Box3().setFromObject(model);
   const sourceSize = box.getSize(new Vector3());
@@ -127,17 +142,11 @@ export async function loadModel(
   model.position.z -= centre.z;
   model.position.y -= scaledBox.min.y;
 
+  // Applied last, so an offset is always relative to the seated position.
   if (cfg.offset) {
     model.position.x += cfg.offset[0];
     model.position.y += cfg.offset[1];
     model.position.z += cfg.offset[2];
-  }
-  if (cfg.rotationDeg) {
-    model.rotation.set(
-      (cfg.rotationDeg[0] * Math.PI) / 180,
-      (cfg.rotationDeg[1] * Math.PI) / 180,
-      (cfg.rotationDeg[2] * Math.PI) / 180,
-    );
   }
 
   if (cfg.material) applyMaterialOverride(model, cfg.material);

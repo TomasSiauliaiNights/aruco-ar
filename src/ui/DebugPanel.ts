@@ -87,8 +87,10 @@ interface SliderSpec {
 }
 
 const SLIDERS: SliderSpec[] = [
-  { key: 'positionMinCutoff', label: 'pos minCutoff', min: 0.1, max: 8, step: 0.1 },
-  { key: 'positionBeta', label: 'pos beta', min: 0, max: 1, step: 0.01 },
+  { key: 'positionMinCutoff', label: 'pos minCutoff', min: 0.1, max: 12, step: 0.1 },
+  // Up to 15: with positions in metres the useful range is roughly 0.5-6, so a
+  // cap of 1 put almost the whole range in the 'no visible effect' zone.
+  { key: 'positionBeta', label: 'pos beta', min: 0, max: 15, step: 0.1 },
   { key: 'rotationSlerp', label: 'rot slerp', min: 0.02, max: 1, step: 0.02 },
   { key: 'holdMs', label: 'hold ms', min: 0, max: 1000, step: 20 },
   { key: 'processingWidth', label: 'proc width', min: 240, max: 960, step: 80 },
