@@ -18,7 +18,11 @@ export default defineConfig({
   reporter: process.env.CI ? [['github'], ['list']] : [['list']],
 
   use: {
-    baseURL: 'http://localhost:4173',
+    // The preview server is HTTPS because @vitejs/plugin-basic-ssl applies to
+    // it as well. That is closer to production anyway -- the camera needs a
+    // secure context -- so the tests use https and accept the self-signed cert.
+    baseURL: 'https://localhost:4173',
+    ignoreHTTPSErrors: true,
     trace: 'retain-on-failure',
     video: 'off',
   },
@@ -40,6 +44,9 @@ export default defineConfig({
             // Headless Chromium falls back to SwiftShader for WebGL; without
             // this, some CI images refuse to create a GL context at all.
             '--enable-unsafe-swiftshader',
+            // The preview server's certificate is self-signed; without this,
+            // Chromium refuses to register the service worker on it.
+            '--ignore-certificate-errors',
           ],
         },
       },
@@ -50,7 +57,8 @@ export default defineConfig({
   // real chunking are exercised rather than the dev server's.
   webServer: {
     command: 'npm run build && npx vite preview --port 4173 --strictPort',
-    url: 'http://localhost:4173/index.html',
+    url: 'https://localhost:4173/index.html',
+    ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,
     timeout: 300_000,
     stdout: 'pipe',

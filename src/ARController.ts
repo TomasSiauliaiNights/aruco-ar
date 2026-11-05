@@ -180,6 +180,12 @@ export class ARController {
         );
       },
       onError: (message, fatal) => {
+        if (!fatal) {
+          // A dropped frame must not strand the capture slot, and a silent
+          // failure here is very hard to diagnose on a phone.
+          console.warn('detector:', message);
+          this.frameSource?.release();
+        }
         if (fatal) {
           this.cb.onFatalError(
             'Detector failed to load',

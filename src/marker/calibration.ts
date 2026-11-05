@@ -121,7 +121,7 @@ function squareMeters(): number {
 async function ensureCv(): Promise<CalibCv> {
   if (cv) return cv as CalibCv;
   setStatus('Loading OpenCV (about 11 MB, cached after the first time)…');
-  cv = await loadOpenCvOnMainThread();
+  cv = (await loadOpenCvOnMainThread()).cv;
   setStatus('OpenCV ready.');
   return cv as CalibCv;
 }

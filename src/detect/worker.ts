@@ -42,71 +42,106 @@ let cv: OpenCV | null = null;
  * importScripts alone gives no progress events, and an 11 MB silent wait on a
  * phone reads as a hang.
  */
-async function loadOpenCv(url: string): Promise<OpenCV> {
+/**
+ * IMPORTANT: the OpenCV module must never travel through a promise.
+ *
+ * opencv.js defines `Module.then`:
+ *   function(func){ if(calledRun){func(Module)} else {...} return Module }
+ *
+ * That makes it a thenable whose `then` returns the module itself, so the
+ * promise resolution procedure recurses without end. `return mod` from an
+ * async function, `resolve(mod)`, or `await mod` is enough to do it, and the
+ * failure is silent and baffling: in a worker the thread is killed outright
+ * with no error event, moments after the last line that ran; in Node the
+ * process simply stops, with even setTimeout no longer firing.
+ *
+ * So the module is assigned to a variable and the promise resolves with
+ * nothing.
+ */
+async function loadOpenCv(url: string): Promise<void> {
   const started = performance.now();
+
+  // Stream the file once purely to report progress, DISCARDING the bytes as
+  // they arrive, then let importScripts load it from the HTTP cache this just
+  // populated.
+  //
+  // The obvious alternative -- buffer the response, then hand the text to
+  // importScripts via a blob URL -- kills the worker outright on this file.
+  // Between the retained chunks, the concatenated copy, the decoded string and
+  // the copy importScripts compiles, an 11 MB script turns into hundreds of
+  // megabytes, and the worker is terminated with no error event: `init` is
+  // handled, `ready` is posted, and then the thread simply stops, taking every
+  // later message with it. Counting bytes without keeping them costs nothing
+  // and keeps memory flat, which matters rather more on a phone than here.
   const res = await fetch(url, { credentials: 'omit' });
   if (!res.ok) throw new Error(`opencv.js fetch failed: ${res.status} ${res.statusText}`);
 
+  // Absent behind some proxies and when the response is compressed; the UI
+  // falls back to showing megabytes rather than a percentage.
   const declared = Number(res.headers.get('content-length') ?? '0');
-  let source: string;
   let bytes = 0;
 
   if (res.body) {
     const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
+    // Throttled: an 11 MB download arrives in hundreds of chunks, and a
+    // postMessage per chunk is pure overhead for a progress bar nobody can
+    // read at that rate.
+    let lastPost = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(value);
       bytes += value.byteLength;
-      post({ type: 'progress', loaded: bytes, total: declared });
+      const now = performance.now();
+      if (now - lastPost > 100) {
+        lastPost = now;
+        post({ type: 'progress', loaded: bytes, total: declared });
+      }
     }
-    const merged = new Uint8Array(bytes);
-    let at = 0;
-    for (const c of chunks) {
-      merged.set(c, at);
-      at += c.byteLength;
-    }
-    source = new TextDecoder().decode(merged);
+    post({ type: 'progress', loaded: bytes, total: declared || bytes });
   } else {
-    source = await res.text();
-    bytes = source.length;
+    // No streaming support: fall back to a single read, and let it go at once.
+    bytes = (await res.arrayBuffer()).byteLength;
+    post({ type: 'progress', loaded: bytes, total: declared || bytes });
   }
 
-  // Pre-creating self.cv means the Emscripten module adopts this object
-  // (`var Module = typeof cv !== "undefined" ? cv : {}`), so the
-  // onRuntimeInitialized hook cannot be missed in a race.
-  const pending: { resolve: () => void; reject: (e: unknown) => void } = {
-    resolve: () => {},
-    reject: () => {},
-  };
-  const ready = new Promise<void>((resolve, reject) => {
-    pending.resolve = resolve;
-    pending.reject = reject;
-  });
-
-  ctx.cv = { onRuntimeInitialized: () => pending.resolve() } as unknown as OpenCV;
-
-  const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
-  try {
-    ctx.importScripts(blobUrl);
-  } finally {
-    URL.revokeObjectURL(blobUrl);
-  }
+  ctx.importScripts(url);
 
   const mod = ctx.cv as OpenCV | undefined;
   if (!mod) throw new Error('opencv.js did not define a module');
 
-  // If instantiation already finished, the hook will not fire again.
-  if (!mod.Mat) {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('opencv.js runtime did not initialise within 30s')), 30_000),
-    );
-    await Promise.race([ready, timeout]);
-  }
+  await waitForRuntime(mod);
 
+  // Assigned here rather than returned, for the reason above.
+  cv = mod;
   post({ type: 'ready', openCvBytes: bytes, loadMs: performance.now() - started });
-  return mod;
+}
+
+/**
+ * Waits for the Emscripten runtime to finish instantiating, by polling.
+ *
+ * Deliberately does NOT use `onRuntimeInitialized`, in either direction:
+ * presetting `self.cv = { onRuntimeInitialized }` before the import gets
+ * silently dropped, and assigning it after the import overwrites the handler
+ * opencv.js installed for its own binding generation. Polling for `cv.Mat`
+ * observes the result without interfering with either.
+ */
+function waitForRuntime(mod: OpenCV, timeoutMs = 60_000): Promise<void> {
+  if (mod.Mat) return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const started = performance.now();
+    const poll = setInterval(() => {
+      if (mod.Mat) {
+        clearInterval(poll);
+        resolve();
+        return;
+      }
+      if (performance.now() - started > timeoutMs) {
+        clearInterval(poll);
+        reject(new Error(`opencv.js runtime did not initialise within ${timeoutMs / 1000}s`));
+      }
+    }, 25);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -365,6 +400,7 @@ function processFrame(msg: Extract<ToWorker, { type: 'frame' }>): void {
   const cvm = cv;
   if (!cvm) {
     msg.bitmap?.close();
+    postEmptyResult(msg);
     return;
   }
 
@@ -383,6 +419,10 @@ function processFrame(msg: Extract<ToWorker, { type: 'frame' }>): void {
   }
   if (!pixels) {
     post({ type: 'error', message: 'frame had no usable pixel source', fatal: false });
+    // Still report a result. The main thread releases its backpressure slot on
+    // a result and only on a result, so returning here would stall the whole
+    // pipeline after a single bad frame.
+    postEmptyResult(msg);
     return;
   }
 
@@ -456,6 +496,22 @@ function processFrame(msg: Extract<ToWorker, { type: 'frame' }>): void {
   });
 }
 
+/** A result with no markers, used on every failure path. */
+function postEmptyResult(msg: Extract<ToWorker, { type: 'frame' }>): void {
+  post({
+    type: 'result',
+    frameId: msg.frameId,
+    timestamp: msg.timestamp,
+    width: msg.width,
+    height: msg.height,
+    markers: [],
+    detectMs: 0,
+    poseMs: 0,
+    totalMs: 0,
+    meanLuma: 0,
+  });
+}
+
 /**
  * Mean of a greyscale buffer, sampled every 16th pixel. Full accuracy is not
  * needed for an exposure hint, and the stride keeps this under 0.05 ms.
@@ -481,9 +537,6 @@ ctx.addEventListener('message', (ev: MessageEvent<ToWorker>) => {
     case 'init': {
       detectParams = msg.params;
       loadOpenCv(msg.opencvUrl)
-        .then((mod) => {
-          cv = mod;
-        })
         .catch((err: unknown) => {
           post({ type: 'error', message: `detector init failed: ${String(err)}`, fatal: true });
         });
@@ -504,19 +557,8 @@ ctx.addEventListener('message', (ev: MessageEvent<ToWorker>) => {
       } catch (err) {
         msg.bitmap?.close();
         post({ type: 'error', message: `frame failed: ${String(err)}`, fatal: false });
-        // Still report an empty result so the main thread releases backpressure.
-        post({
-          type: 'result',
-          frameId: msg.frameId,
-          timestamp: msg.timestamp,
-          width: msg.width,
-          height: msg.height,
-          markers: [],
-          detectMs: 0,
-          poseMs: 0,
-          totalMs: 0,
-          meanLuma: 0,
-        });
+        // Still report a result so the main thread releases backpressure.
+        postEmptyResult(msg);
       }
       break;
     }
