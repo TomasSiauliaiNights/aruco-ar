@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Benchmark</title>
+<meta name="description" content="Measure ArUco detection time and sustained frame rate on this device." />
+<meta name="theme-color" content="#0b0d10" />
+<link rel="stylesheet" href="./src/ui/app.css" />
+</head>
+<body class="page-body">
+<div id="app">
+  <main class="page">
+    <p><a href="./index.html">&#8592; Back to the app</a></p>
+    <h1>Benchmark</h1>
+    <p>
+      Runs the real detector over a synthetic clip of a moving marker, at several processing
+      widths. This measures detection on <em>this</em> device, which is the only number that
+      matters &mdash; desktop figures are not predictive of a phone.
+    </p>
+    <p>
+      The clip is generated here, so there is no camera and no network involved beyond loading the
+      detector itself.
+    </p>
+
+    <div class="field">
+      <label for="frames">Frames per width</label>
+      <input id="frames" type="number" min="20" max="400" step="10" value="120" />
+    </div>
+    <div class="field">
+      <label for="widths">Processing widths</label>
+      <input id="widths" type="text" value="320, 480, 640, 960" />
+    </div>
+    <div class="field">
+      <label for="refine">Sub-pixel refinement</label>
+      <select id="refine">
+        <option value="both">Measure both</option>
+        <option value="on">On only</option>
+        <option value="off">Off only</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <button id="btn-run" class="btn btn--primary" type="button" style="width:auto">Run benchmark</button>
+      <button id="btn-copy" class="btn" type="button" disabled>Copy as Markdown</button>
+    </div>
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <table class="bench" id="results" hidden>
+      <thead>
+        <tr>
+          <th>Width</th>
+          <th>Refine</th>
+          <th>p50 ms</th>
+          <th>p95 ms</th>
+          <th>max ms</th>
+          <th>det/s</th>
+          <th>found</th>
+          <th>corner err px</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <h2>Render-rate check</h2>
+    <p>
+      Detection time is only half the story: the app renders on the main thread while the worker
+      detects. This measures the frame rate actually achieved with both running.
+    </p>
+    <div class="row">
+      <button id="btn-fps" class="btn" type="button">Measure render rate (5s)</button>
+    </div>
+    <p id="fps-result"></p>
+    <div id="env"></div>
+  </main>
+</div>
+<script type="module" src="./src/bench/benchPage.ts"></script>
+</body>
+</html>

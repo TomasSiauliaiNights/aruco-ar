@@ -1,0 +1,31 @@
+{
+  "name": "aruco-ar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "On-device browser marker AR: ArUco 4x4_50 -> glTF, iOS Safari + Android Chrome",
+  "scripts": {
+    "dev": "npm run assets && vite",
+    "build": "npm run assets && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node scripts/make-y4m.mjs && playwright test",
+    "bench:node": "node scripts/bench-node.mjs",
+    "assets": "node scripts/fetch-opencv.mjs && node scripts/copy-decoders.mjs && node scripts/make-placeholder-glb.mjs",
+    "postinstall": "node scripts/copy-decoders.mjs"
+  },
+  "dependencies": {
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.6",
+    "vitest": "^5.1.0"
+  }
+}

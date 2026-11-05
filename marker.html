@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Print a marker</title>
+<meta name="description" content="Generate a printable ArUco 4x4_50 marker at an exact physical size." />
+<meta name="theme-color" content="#0b0d10" />
+<link rel="stylesheet" href="./src/ui/app.css" />
+</head>
+<body class="page-body">
+<div id="app">
+  <main class="page">
+    <div class="no-print">
+      <p><a href="./index.html">&#8592; Back to the app</a></p>
+      <h1>Print a marker</h1>
+      <p>
+        ArUco <strong>4x4_50</strong> &mdash; the dictionary this app detects. The size you print
+        at must match the size the app is told about, or every distance it reports is wrong by the
+        same factor.
+      </p>
+
+      <div class="field">
+        <label for="marker-id">Marker id</label>
+        <select id="marker-id"></select>
+      </div>
+      <div class="field">
+        <label for="marker-size">Side length (mm)</label>
+        <input id="marker-size" type="number" min="20" max="400" step="1" value="100" />
+      </div>
+      <div class="field">
+        <label for="quiet-zone">Quiet zone</label>
+        <select id="quiet-zone">
+          <option value="0.25">25% of side (recommended)</option>
+          <option value="0.4">40% of side (more robust)</option>
+          <option value="0.15">15% of side (tight)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="with-label">Caption under marker</label>
+        <input id="with-label" type="checkbox" checked />
+      </div>
+
+      <p id="marker-note"></p>
+
+      <div class="row">
+        <button id="btn-print" class="btn btn--primary" type="button" style="width:auto">Print</button>
+        <button id="btn-svg" class="btn" type="button">Download SVG</button>
+        <button id="btn-use" class="btn" type="button">Use this size in the app</button>
+      </div>
+      <p id="status" role="status" aria-live="polite"></p>
+    </div>
+
+    <div class="preview" id="preview"></div>
+
+    <div class="no-print">
+      <h2>Printing it without scaling</h2>
+      <ul>
+        <li>
+          In the print dialog set <strong>Scale</strong> to <strong>100%</strong>. Do not use
+          &ldquo;Fit to page&rdquo;, &ldquo;Shrink to printable area&rdquo; or &ldquo;Scale to
+          fit&rdquo; &mdash; each of those silently resizes the marker.
+        </li>
+        <li>
+          On macOS Preview and Safari, make sure <strong>Scale: 100%</strong> is selected rather
+          than &ldquo;Scale to Fit&rdquo;.
+        </li>
+        <li>
+          Then <strong>measure the printed black square with a ruler</strong>, outer edge to outer
+          edge. If it is not the size you asked for, type the measured value into the app&rsquo;s
+          debug panel instead of trusting the setting.
+        </li>
+        <li>
+          Print on matte paper if you can. Glossy paper and lamination produce specular highlights
+          that wash out the border and cost you detections.
+        </li>
+        <li>
+          Mount it flat. A curled or bent marker breaks the planarity the pose solver assumes, and
+          shows up as a model that leans.
+        </li>
+      </ul>
+
+      <h2>Calibration boards</h2>
+      <p>
+        For per-device camera calibration, the <a href="./calibrate.html">calibration page</a>
+        generates its own printable board.
+      </p>
+    </div>
+  </main>
+</div>
+<script type="module" src="./src/marker/markerPage.ts"></script>
+</body>
+</html>

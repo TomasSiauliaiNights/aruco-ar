@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>Marker AR</title>
+<meta name="description" content="On-device ArUco marker augmented reality. Camera frames never leave your phone." />
+<meta name="theme-color" content="#0b0d10" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Marker AR" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./icons/icon-180.png" />
+<link rel="icon" href="./icons/icon-192.png" />
+<link rel="stylesheet" href="./src/ui/app.css" />
+</head>
+<body>
+<div id="app">
+  <!-- Start screen. The camera must be opened from an explicit user gesture on iOS. -->
+  <section id="start" class="screen screen--start" aria-labelledby="start-title">
+    <div class="start__inner">
+      <h1 id="start-title">Marker AR</h1>
+      <p class="start__lede">
+        Point your camera at a printed ArUco marker and a 3D model appears on it.
+      </p>
+      <p class="start__privacy">
+        Everything runs on this device. Camera frames are never uploaded.
+      </p>
+      <button id="start-btn" class="btn btn--primary" type="button">Start camera</button>
+      <p id="start-status" class="start__status" role="status" aria-live="polite"></p>
+      <nav class="start__links">
+        <a href="./marker.html">Print a marker</a>
+        <a href="./calibrate.html">Calibrate</a>
+        <a href="./bench.html">Benchmark</a>
+      </nav>
+    </div>
+  </section>
+
+  <!-- AR view. Video underneath, transparent WebGL canvas on top, 2D debug canvas above that. -->
+  <section id="ar" class="screen screen--ar" hidden>
+    <video id="video" playsinline muted autoplay disablepictureinpicture></video>
+    <canvas id="gl"></canvas>
+    <canvas id="overlay"></canvas>
+
+    <div id="hud" class="hud">
+      <div class="hud__row hud__row--top">
+        <button id="btn-back" class="btn btn--icon" type="button" aria-label="Back to start">&#8592;</button>
+        <span id="lock-pill" class="pill" data-state="searching">Searching&hellip;</span>
+        <button id="btn-debug" class="btn btn--icon" type="button" aria-label="Toggle debug overlay" aria-pressed="false">i</button>
+      </div>
+      <div class="hud__row hud__row--bottom">
+        <button id="btn-torch" class="btn btn--icon" type="button" aria-label="Toggle torch" hidden>&#9728;</button>
+        <button id="btn-shot" class="btn btn--shutter" type="button" aria-label="Take screenshot"></button>
+        <button id="btn-swap" class="btn btn--icon" type="button" aria-label="Switch camera" hidden>&#8646;</button>
+      </div>
+    </div>
+
+    <div id="loading" class="loading" hidden>
+      <div class="loading__bar"><div id="loading-fill" class="loading__fill"></div></div>
+      <p id="loading-text" class="loading__text">Loading detector&hellip;</p>
+    </div>
+
+    <aside id="debug" class="debug" hidden aria-label="Debug overlay"></aside>
+  </section>
+
+  <div id="error" class="error" hidden role="alertdialog" aria-labelledby="error-title">
+    <div class="error__card">
+      <h2 id="error-title">Camera unavailable</h2>
+      <p id="error-body"></p>
+      <button id="error-close" class="btn" type="button">Back</button>
+    </div>
+  </div>
+</div>
+<script type="module" src="./src/main.ts"></script>
+</body>
+</html>
