@@ -5,7 +5,7 @@ Everything runs on the device: no backend, no analytics, and camera frames never
 leave the browser.
 
 - **Dictionary:** ArUco `4x4_50`
-- **Marker 0 → `public/models/model.glb`** (a generated placeholder; swap in your own)
+- **Marker 0 → `public/models/galvok-smile.glb`** (swap in your own; a generated placeholder lives at `models/model.glb`)
 - **Printed marker side:** 100 mm by default, changeable at runtime
 - **Targets:** iPhone 12 or newer (Safari, including installed PWA), mid-range Android Chrome
 

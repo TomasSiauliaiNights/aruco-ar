@@ -11,9 +11,18 @@
  * costs nothing extra.
  */
 
-import { AnimationMixer, Box3, Group, Vector3, type AnimationClip, type Object3D } from 'three';
+import {
+  AnimationMixer,
+  Box3,
+  Group,
+  SRGBColorSpace,
+  Vector3,
+  type AnimationClip,
+  type Mesh,
+  type Object3D,
+} from 'three';
 import type { WebGLRenderer } from 'three';
-import type { MarkerModelConfig } from '../config';
+import type { MarkerModelConfig, MaterialOverride } from '../config';
 
 export interface LoadedModel {
   /** Anchor to place at the marker pose. The model sits inside it. */
@@ -88,6 +97,8 @@ export async function loadModel(
   const gltf = await loader.loadAsync(url);
   const model = gltf.scene;
 
+  await repairGeometry(model);
+
   // Scale
   const box = new Box3().setFromObject(model);
   const sourceSize = box.getSize(new Vector3());
@@ -102,9 +113,18 @@ export async function loadModel(
   }
   model.scale.setScalar(appliedScale);
 
-  // Sit the model on the marker plane rather than through it: shift so its
-  // lowest point is at y = 0 in the anchor frame.
+  // Seat the model on the marker: centred horizontally, resting on the plane
+  // rather than sunk through it or floating above it.
+  //
+  // All three axes are corrected, not just Y. Exported models very often carry
+  // a translation baked into their vertices -- a model converted out of a 3MF,
+  // for instance, keeps the print bed's centring offset, which here was 125 mm
+  // in two axes. Left alone that renders the model beside the marker rather
+  // than on it, usually off-screen, which looks like tracking having failed.
   const scaledBox = new Box3().setFromObject(model);
+  const centre = scaledBox.getCenter(new Vector3());
+  model.position.x -= centre.x;
+  model.position.z -= centre.z;
   model.position.y -= scaledBox.min.y;
 
   if (cfg.offset) {
@@ -119,6 +139,8 @@ export async function loadModel(
       (cfg.rotationDeg[2] * Math.PI) / 180,
     );
   }
+
+  if (cfg.material) applyMaterialOverride(model, cfg.material);
 
   if (cfg.castShadow !== false) {
     model.traverse((obj: Object3D) => {
@@ -157,6 +179,86 @@ export async function loadModel(
       group.clear();
     },
   };
+}
+
+/**
+ * Applies a material override from the config.
+ *
+ * Exporters that carry no material information give everything a default white
+ * surface at full roughness, which renders as flat chalk with no response to
+ * the environment light at all. Rather than send someone back to their 3D tool
+ * to re-export, the look can be set from config.ts.
+ *
+ * Only the named properties are touched, so a model that does ship proper
+ * materials and textures keeps them unless explicitly overridden.
+ */
+function applyMaterialOverride(root: Object3D, override: MaterialOverride): void {
+  root.traverse((obj) => {
+    const mesh = obj as Mesh & { isMesh?: boolean };
+    if (!mesh.isMesh || !mesh.material) return;
+
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const m = material as unknown as {
+        color?: { setStyle: (s: string, cs?: string) => void };
+        metalness?: number;
+        roughness?: number;
+        emissive?: { setStyle: (s: string, cs?: string) => void };
+        emissiveIntensity?: number;
+        needsUpdate?: boolean;
+      };
+      // setStyle with SRGBColorSpace: a hex written by a human is sRGB, and
+      // three.js works in linear space internally.
+      if (override.color && m.color) m.color.setStyle(override.color, SRGBColorSpace);
+      if (override.metalness !== undefined) m.metalness = override.metalness;
+      if (override.roughness !== undefined) m.roughness = override.roughness;
+      if (override.emissive && m.emissive) m.emissive.setStyle(override.emissive, SRGBColorSpace);
+      if (override.emissiveIntensity !== undefined) m.emissiveIntensity = override.emissiveIntensity;
+      m.needsUpdate = true;
+    }
+  });
+}
+
+/**
+ * Fills in what an exporter left out.
+ *
+ * Normals are the common omission: a glTF converted from a mesh format that has
+ * no concept of them (STL, 3MF, OBJ without `vn`) arrives with position data
+ * only, and three.js falls back to flat shading -- so every triangle of a dense
+ * mesh is visible as a facet.
+ *
+ * `toCreasedNormals` is used rather than `computeVertexNormals` because the
+ * latter averages across every shared vertex, which rounds off the hard edges a
+ * logo or a mechanical part depends on. Creased normals smooth only across
+ * faces that meet gently and keep genuine edges sharp.
+ *
+ * Imported lazily: a model that already has normals never pays for it.
+ */
+async function repairGeometry(root: Object3D, creaseAngleDeg = 35): Promise<void> {
+  const needsNormals: Mesh[] = [];
+  root.traverse((obj) => {
+    const mesh = obj as Mesh & { isMesh?: boolean };
+    if (mesh.isMesh && mesh.geometry && !mesh.geometry.getAttribute('normal')) {
+      needsNormals.push(mesh);
+    }
+  });
+  if (needsNormals.length === 0) return;
+
+  const { toCreasedNormals } = await import('three/examples/jsm/utils/BufferGeometryUtils.js');
+  const angle = (creaseAngleDeg * Math.PI) / 180;
+
+  for (const mesh of needsNormals) {
+    const original = mesh.geometry;
+    mesh.geometry = toCreasedNormals(original, angle);
+    original.dispose();
+    // The exporter set flatShading because there were no normals to shade with.
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const m = material as { flatShading?: boolean; needsUpdate?: boolean };
+      if (m.flatShading) {
+        m.flatShading = false;
+        m.needsUpdate = true;
+      }
+    }
+  }
 }
 
 /** Releases every GPU resource under an object. */

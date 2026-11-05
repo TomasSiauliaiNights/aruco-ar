@@ -3,6 +3,25 @@
  * new deployment lives in this file.
  */
 
+/**
+ * Look overrides for a model's materials.
+ *
+ * Useful when an export carries no material information -- converters from
+ * print formats such as STL or 3MF typically emit a single white surface at
+ * full roughness, which renders as flat chalk. Only the properties given here
+ * are changed; a model with real materials keeps them.
+ */
+export interface MaterialOverride {
+  /** CSS colour, e.g. '#5ad1a0'. Interpreted as sRGB. */
+  color?: string;
+  /** 0 = dielectric (plastic, paint), 1 = bare metal. */
+  metalness?: number;
+  /** 0 = mirror, 1 = fully matte. Around 0.35 reads as a satin finish. */
+  roughness?: number;
+  emissive?: string;
+  emissiveIntensity?: number;
+}
+
 /** Which marker a model is bound to, and how it sits on that marker. */
 export interface MarkerModelConfig {
   /** URL of a .glb, relative to the site base. Lazy-loaded on first lock. */
@@ -27,6 +46,8 @@ export interface MarkerModelConfig {
   animation?: string | number | null;
   /** Cast a shadow onto the marker-plane shadow catcher. */
   castShadow?: boolean;
+  /** Override the model's materials; see MaterialOverride. */
+  material?: MaterialOverride;
 }
 
 export interface AppConfig {
@@ -87,16 +108,23 @@ export const config: AppConfig = {
 
   markers: {
     0: {
-      url: 'models/model.glb',
+      url: 'models/galvok-smile.glb',
       scale: 'fitToMarker',
-      fitFraction: 0.8,
+      fitFraction: 0.9,
       offset: [0, 0, 0],
       rotationDeg: [0, 0, 0],
       animation: 0,
       castShadow: true,
+      // The export carries no material information at all -- a single white
+      // surface at full roughness -- so the look is set here rather than by
+      // re-exporting from the 3D tool.
+      material: { color: '#e8eaee', metalness: 0.15, roughness: 0.38 },
     },
     // Add more markers by copying the block above and changing the id and url:
     // 1: { url: 'models/other.glb', scale: 1 },
+    //
+    // models/model.glb is the generated placeholder (npm run assets), kept as a
+    // fallback if you remove the model above.
   },
 
   detection: {
