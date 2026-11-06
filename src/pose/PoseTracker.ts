@@ -42,12 +42,14 @@ export interface TrackerOptions {
 }
 
 export const defaultTrackerOptions: TrackerOptions = {
-  positionMinCutoff: 4.0,
+  positionMinCutoff: 10.0,
   // See the note in config.ts: beta is scaled for metres, not pixels, and the
   // lag/jitter trade-off is measured there.
-  positionBeta: 6.0,
-  positionDerivateCutoff: 1.0,
-  rotationSlerp: 0.45,
+  positionBeta: 8.0,
+  // Not the textbook 1 Hz: that delays the filter's reaction to motion onset by
+  // ~160 ms, which reads as the model being loosely attached. See config.ts.
+  positionDerivateCutoff: 8.0,
+  rotationSlerp: 0.6,
   holdMs: 220,
   fadeOutMs: 260,
   fadeInMs: 180,

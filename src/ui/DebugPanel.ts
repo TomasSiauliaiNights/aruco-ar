@@ -60,6 +60,7 @@ declare global {
 export interface TuningValues {
   positionMinCutoff: number;
   positionBeta: number;
+  positionDerivateCutoff: number;
   rotationSlerp: number;
   holdMs: number;
   processingWidth: number;
@@ -91,6 +92,10 @@ const SLIDERS: SliderSpec[] = [
   // Up to 15: with positions in metres the useful range is roughly 0.5-6, so a
   // cap of 1 put almost the whole range in the 'no visible effect' zone.
   { key: 'positionBeta', label: 'pos beta', min: 0, max: 15, step: 0.1 },
+  // How quickly the filter notices the marker has started moving. Low values
+  // feel like the model is loosely attached: it sits still for a moment, then
+  // catches up. This is usually the knob to reach for first.
+  { key: 'positionDerivateCutoff', label: 'pos react', min: 0.5, max: 20, step: 0.5 },
   { key: 'rotationSlerp', label: 'rot slerp', min: 0.02, max: 1, step: 0.02 },
   { key: 'holdMs', label: 'hold ms', min: 0, max: 1000, step: 20 },
   { key: 'processingWidth', label: 'proc width', min: 240, max: 960, step: 80 },

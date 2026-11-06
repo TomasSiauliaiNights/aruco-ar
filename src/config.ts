@@ -110,8 +110,14 @@ export const config: AppConfig = {
     0: {
       url: 'models/galvok-smile.glb',
       scale: 'fitToMarker',
-      fitFraction: 0.9,
-      offset: [0, 0, 0],
+      // 1.6 of the marker side, so the logo overhangs its marker. That is
+      // deliberate and costs nothing: detection reads the camera frame, not the
+      // rendered scene, so a model drawn over the marker never hides it from
+      // the detector.
+      fitFraction: 1.6,
+      // Floats clear of the marker surface. The shadow catcher stays on the
+      // marker plane, so the gap reads as a hover rather than a misalignment.
+      offset: [0, 0.02, 0],
       // Lays the logo flat on the marker, lettering upward. The lettering is
       // on the model's -Z face, so +90 about X is what brings it up; -90 shows
       // the blank back of the logo instead.
@@ -165,10 +171,23 @@ export const config: AppConfig = {
     // paying 47 mm of lag to save 0.08 mm of wobble. About 10 mm of what is
     // left is irreducible: at 15 Hz the newest measurement is already up to
     // 66 ms old before any filtering happens.
-    positionMinCutoff: 4.0,
-    positionBeta: 6.0,
-    positionDerivateCutoff: 1.0,
-    rotationSlerp: 0.45,
+    // derivateCutoff is the one that decides whether the model feels glued to
+    // the marker or slightly detached from it.
+    //
+    // One Euro only loosens its smoothing once it believes the marker is
+    // moving, and that belief comes from a speed estimate which is itself
+    // low-passed at derivateCutoff. At the textbook 1 Hz that estimate has a
+    // 159 ms time constant, so a nudge produced no visible movement for about a
+    // sixth of a second and then caught up. Steady-state lag was never the
+    // problem at low speed -- at 3 cm/s the smoothing alone accounts for barely
+    // a millimetre -- it was the delay before the filter reacted at all.
+    //
+    // At 8 Hz the speed estimate settles in ~20 ms, roughly one frame, so the
+    // cutoff opens up as soon as the marker starts to move.
+    positionMinCutoff: 10.0,
+    positionBeta: 8.0,
+    positionDerivateCutoff: 8.0,
+    rotationSlerp: 0.6,
     holdMs: 220,
     fadeOutMs: 260,
     fadeInMs: 180,

@@ -147,9 +147,13 @@ test.describe('AR pipeline', () => {
     // ... but the main thread's own per-frame cost stays small, which is only
     // possible because detection is on the worker.
     expect(avgRender).toBeLessThan(avgDetect + 8);
-    // Headless SwiftShader is slow, so this is a floor against a stalled loop,
-    // not a performance assertion.
-    expect(avgFps).toBeGreaterThan(10);
+    // A floor against a stalled loop, NOT a performance assertion. Headless
+    // Chromium renders WebGL through SwiftShader on the CPU, so this number is
+    // fill-rate bound and moves with how much of the screen the model covers --
+    // enlarging the model to 1.6 of the marker took it from ~13 to ~8 fps here,
+    // which says nothing about a real GPU. Device frame rate is measured on the
+    // bench page instead.
+    expect(avgFps).toBeGreaterThan(4);
 
     // Frames are being captured and fed continuously.
     expect(samples[samples.length - 1]!.capturedFrames).toBeGreaterThan(

@@ -563,6 +563,7 @@ export class ARController {
     const initial: TuningValues = {
       positionMinCutoff: config.filter.positionMinCutoff,
       positionBeta: config.filter.positionBeta,
+      positionDerivateCutoff: config.filter.positionDerivateCutoff,
       rotationSlerp: config.filter.rotationSlerp,
       holdMs: config.filter.holdMs,
       processingWidth: this.processingWidth,
@@ -586,6 +587,7 @@ export class ARController {
     if (
       values.positionMinCutoff !== undefined ||
       values.positionBeta !== undefined ||
+      values.positionDerivateCutoff !== undefined ||
       values.rotationSlerp !== undefined ||
       values.holdMs !== undefined
     ) {
@@ -594,6 +596,9 @@ export class ARController {
           ? { positionMinCutoff: values.positionMinCutoff }
           : {}),
         ...(values.positionBeta !== undefined ? { positionBeta: values.positionBeta } : {}),
+        ...(values.positionDerivateCutoff !== undefined
+          ? { positionDerivateCutoff: values.positionDerivateCutoff }
+          : {}),
         ...(values.rotationSlerp !== undefined ? { rotationSlerp: values.rotationSlerp } : {}),
         ...(values.holdMs !== undefined ? { holdMs: values.holdMs } : {}),
       });
